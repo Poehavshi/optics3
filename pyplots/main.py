@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-path = r"C:\Users\dimxx\IdeaProjects\optics_3\src\main\resources\\"
+path = r"/home/arkadi/IdeaProjects/optica3/src/main/resources/"
 
 
 def surface_plot(matrix, **kwargs):

@@ -2,8 +2,9 @@ package model;
 
 import org.apache.commons.math3.complex.Complex;
 import org.apache.commons.math3.special.BesselJ;
-
-import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.math3.transform.DftNormalization;
+import org.apache.commons.math3.transform.FastFourierTransformer;
+import org.apache.commons.math3.transform.TransformType;
 
 import java.util.*;
 import java.util.logging.Logger;
@@ -11,6 +12,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static org.apache.commons.math3.util.FastMath.*;
+import static utility.FunctionsUtility.*;
 
 
 /**
@@ -36,7 +38,7 @@ public class Model {
         return Complex.I.multiply(p).exp().multiply(besselJ.value(alpha * r));
     }
 
-    public LinkedHashMap<Double, Complex> getFunctionList(){
+    public LinkedHashMap<Double, Complex> createFunctionList(){
         List<Double> xs = createListOfX();
 
         List<Complex> ys = xs.stream()
@@ -50,7 +52,7 @@ public class Model {
         return result;
     }
 
-    private List<Double> createListOfX(){
+    public List<Double> createListOfX(){
         List<Double> values = new ArrayList<>();
         double step = R / SIZE_OF_LIST;
         for (double x = 0; x <= R; x += step) { values.add(x); }
@@ -81,7 +83,10 @@ public class Model {
         return restoredFunction;
     }
 
-    private List<Complex> hankelTransform(List<Complex> f, List<Double> rList) {
+    public LinkedHashMap<Double, Complex> createHankelTransformList() {
+        List<Double> rList = this.createListOfX();
+        List<Complex> f = rList.stream().map(this::f).collect(Collectors.toList());
+
         double hankelTime = System.nanoTime();
 
         List<Complex> result = new ArrayList<>();
@@ -107,6 +112,58 @@ public class Model {
 
         hankelTime = (System.nanoTime() - hankelTime) / 1_000_000;
         log.info("Hankel transformation time: " + hankelTime + " ms");
-        return result;
+
+        LinkedHashMap<Double, Complex> mapResult = new LinkedHashMap<>();
+        for (int i = 0; i<SIZE_OF_LIST; ++i){
+            mapResult.put(rList.get(i), result.get(i));
+        }
+
+        return mapResult;
     }
+
+    private List<Complex> fastFourierTransform(List<Complex> toTransform) {
+        return Arrays.asList(
+                new FastFourierTransformer(DftNormalization.STANDARD)
+                        .transform(toTransform.toArray(new Complex[0]), TransformType.FORWARD)
+        );
+    }
+
+    private List<List<Complex>> fastFourierTransform2(List<List<Complex>> toTransform) {
+        List<List<Complex>> result = new ArrayList<>();
+        for (List<Complex> row : toTransform) {
+            result.add(fastFourierTransform(row));
+        }
+
+        result = transpose(result);
+        for (int i = 0; i < result.size(); i++) {
+            result.set(i, fastFourierTransform(result.get(i)));
+        }
+        return transpose(result);
+    }
+
+    public List<List<Complex>> createFFT2DList() {
+        List<Double> xs = createListOfX();
+
+        List<Complex> functionValues = xs.stream()
+                .map(this::f)
+                .collect(Collectors.toList());
+        List<List<Complex>> toTransform = restoredFunction(functionValues);
+
+        double fftTime = System.nanoTime();
+
+        List<List<Complex>> copyOfFunction = new ArrayList<>(toTransform);
+        addZerosToListSize2(copyOfFunction, SIZE_OF_LIST*4);
+
+        copyOfFunction = swapList2(copyOfFunction);
+        List<List<Complex>> transformedList = fastFourierTransform2(copyOfFunction);
+        transformedList = multiply2(transformedList, h);
+        transformedList = swapList2(transformedList);
+        transformedList = getElementsFromCenter2(transformedList, n * 2 + 1);
+
+        fftTime = (System.nanoTime() - fftTime) / 1_000_000;
+        log.info("FFT transformation time: " + fftTime + " ms");
+
+        return transformedList;
+    }
+
 }
